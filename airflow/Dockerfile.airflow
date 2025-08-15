@@ -1,0 +1,29 @@
+FROM apache/airflow:2.7.3-python3.11
+
+USER root
+
+# Instalar dependencias del sistema para PostGIS
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gdal-bin \
+    libgdal-dev \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Copiar requirements
+COPY airflow/requirements-airflow.txt /requirements-airflow.txt
+
+# Instalar dependencias Python
+RUN pip install --no-cache-dir -r /requirements-airflow.txt
+
+# Configuración de entorno para GDAL
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
+
+# Airflow configuration
+ENV AIRFLOW__CORE__LOAD_EXAMPLES=False
+ENV AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS=False
+ENV AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth

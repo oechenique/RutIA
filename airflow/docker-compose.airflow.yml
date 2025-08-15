@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: rutia_airflow
+    restart: unless-stopped
+    environment:
+      # Database connection (usar la misma DB que RutIA)
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-rutia_admin}:${POSTGRES_PASSWORD:-espacial123}@host.docker.internal:5432/${POSTGRES_DB:-rutia_db}
+      
+      # Core Airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__FERNET_KEY: "rutia_fernet_key_32_chars_minimum_geodojo2025!!"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: "False"
+      
+      # Webserver
+      AIRFLOW__WEBSERVER__SECRET_KEY: "rutia_webserver_secret_key_geodojo_2025"
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: 8080
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+      
+      # API
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
+      
+      # Admin user
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD:-espacial123}
+      _AIRFLOW_WWW_USER_EMAIL: admin@rutia.geodojo.ai
+      _AIRFLOW_WWW_USER_FIRSTNAME: RutIA
+      _AIRFLOW_WWW_USER_LASTNAME: Admin
+      
+      # RutIA integration
+      RUTIA_API_URL: "http://host.docker.internal:3000"
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-rutia_db}
+      POSTGRES_USER: ${POSTGRES_USER:-rutia_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-espacial123}
+      
+      # Empresa config (inherited from .env)
+      EMPRESA_NOMBRE: ${EMPRESA_NOMBRE:-La Geográfica}
+      EMPRESA_LAT: ${EMPRESA_LAT:--34.6037}
+      EMPRESA_LON: ${EMPRESA_LON:--58.3816}
+      H3_RESOLUTION: ${H3_RESOLUTION:-9}
+      
+    ports:
+      - "8080:8080"
+    volumes:
+      # DAGs y configuración
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./config:/opt/airflow/config
+      - ../.env:/opt/airflow/.env:ro
+      
+      # Logs persistentes
+      - airflow_logs:/opt/airflow/logs
+      
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    # Comando de inicio completo
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create --username admin --firstname RutIA --lastname Admin --role Admin --email admin@rutia.geodojo.ai --password espacial123 &&
+        airflow webserver --port 8080 &
+        airflow scheduler
+      "
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  airflow_logs:
+    driver: local
+    name: rutia_airflow_logs

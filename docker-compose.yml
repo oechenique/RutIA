@@ -1,0 +1,185 @@
+version: '3.8'
+
+# =============================================================================
+# RutIA - Docker Compose Completo CON pgRouting TERMONUCLEAR
+# 3 servicios integrados: PostGIS + pgRouting + API + Airflow
+# =============================================================================
+
+services:
+  # 🗄️ Base de Datos PostGIS + pgRouting
+  postgres:
+    image: postgis/postgis:15-3.3  # ✅ FIX CRÍTICO: Incluye pgRouting
+    container_name: rutia_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rutia_db}
+      POSTGRES_USER: ${POSTGRES_USER:-rutia_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-espacial123}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistencia de datos
+      - postgres_data:/var/lib/postgresql/data
+      # Scripts de inicialización (comentado temporalmente)
+      # - ./database/schemas:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rutia_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rutia_admin} -d ${POSTGRES_DB:-rutia_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # 🔗 API Gateway (FastAPI)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rutia_api
+    restart: unless-stopped
+    environment:
+      # Database connection
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-rutia_db}
+      POSTGRES_USER: ${POSTGRES_USER:-rutia_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-espacial123}
+      
+      # API configuration
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      
+      # Empresa configuration
+      EMPRESA_NOMBRE: ${EMPRESA_NOMBRE:-RutIA Demo}
+      EMPRESA_LAT: ${EMPRESA_LAT:--34.6037}
+      EMPRESA_LON: ${EMPRESA_LON:--58.3816}
+      EMPRESA_DIRECCION: ${EMPRESA_DIRECCION:-Blanco Encalada 2680, CABA}
+      
+      # H3 configuration
+      H3_RESOLUTION: ${H3_RESOLUTION:-9}
+      H3_BUFFER_RADIUS: ${H3_BUFFER_RADIUS:-500}
+      
+      # Demo mode
+      DEMO_MODE: ${DEMO_MODE:-true}
+      
+      # External APIs
+      OSM_API_URL: ${OSM_API_URL:-https://overpass-api.de/api/interpreter}
+      
+    ports:
+      - "3000:3000"
+    volumes:
+      # Código fuente (para desarrollo)
+      - ./api:/app/api:ro
+      - ./core:/app/core:ro
+      - ./.env:/app/.env:ro
+      # Logs
+      - ./logs/api:/app/logs
+    networks:
+      - rutia_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 🌊 Airflow Orquestador
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile.airflow
+    container_name: rutia_airflow
+    restart: unless-stopped
+    environment:
+      # Airflow Core
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-rutia_admin}:${POSTGRES_PASSWORD:-espacial123}@postgres:5432/${POSTGRES_DB:-rutia_db}
+      AIRFLOW__CORE__FERNET_KEY: "rutia_fernet_key_32_chars_minimum!!"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: "False"
+      
+      # Webserver
+      AIRFLOW__WEBSERVER__SECRET_KEY: "rutia_secret_key_2025_webinar"
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: 8080
+      AIRFLOW__WEBSERVER__RBAC: "False"
+      
+      # Database
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-rutia_admin}:${POSTGRES_PASSWORD:-espacial123}@postgres:5432/${POSTGRES_DB:-rutia_db}
+      
+      # Airflow Admin User (usando variables .env)
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD:-espacial123}
+      _AIRFLOW_WWW_USER_EMAIL: admin@rutia.ai
+      _AIRFLOW_WWW_USER_FIRSTNAME: RutIA
+      _AIRFLOW_WWW_USER_LASTNAME: Admin
+      
+      # API URLs for DAG
+      RUTIA_API_URL: http://api:3000
+      
+      # Configuration inheritance
+      EMPRESA_NOMBRE: ${EMPRESA_NOMBRE:-RutIA Demo}
+      H3_RESOLUTION: ${H3_RESOLUTION:-9}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      
+      # Database connection for DAGs (hereda de arriba)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-rutia_db}
+      POSTGRES_USER: ${POSTGRES_USER:-rutia_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-espacial123}
+      
+    ports:
+      - "8080:8080"
+    volumes:
+      # DAGs y código
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - ./airflow/plugins:/opt/airflow/plugins:ro
+      - ./core:/opt/airflow/core:ro
+      - ./.env:/opt/airflow/.env:ro
+      # Logs persistentes
+      - ./logs/airflow:/opt/airflow/logs
+      # Configuración
+      - airflow_data:/opt/airflow
+    networks:
+      - rutia_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    command: ["airflow", "standalone"]
+
+# =============================================================================
+# VOLUMES PERSISTENTES
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+    name: rutia_postgres_data
+  
+  airflow_data:
+    driver: local
+    name: rutia_airflow_data
+
+# =============================================================================
+# NETWORK CONFIGURATION
+# =============================================================================
+networks:
+  rutia_network:
+    driver: bridge
+    name: rutia_network
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16

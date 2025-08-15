@@ -1,0 +1,70 @@
+# =============================================================================
+# RutIA API - Dockerfile
+# FastAPI + Motor Espacial + PostGIS connectivity
+# =============================================================================
+
+FROM python:3.11-slim
+
+# Metadatos
+LABEL maintainer="GeoDojo <hello@geodojo.ai>"
+LABEL description="RutIA API - Ruteo Inteligente con IA"
+LABEL version="1.0.0"
+
+# Variables de entorno
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    # PostGIS client libraries
+    libpq-dev \
+    postgresql-client \
+    # Geospatial libraries
+    gdal-bin \
+    libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
+    # Build tools
+    gcc \
+    g++ \
+    make \
+    # Network tools
+    curl \
+    wget \
+    # Clean up
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Copiar requirements API específicos
+COPY requirements-api.txt .
+
+# Instalar dependencias Python para API
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements-api.txt
+
+# Instalar dependencias adicionales para API
+# (ya incluidas en requirements-api.txt)
+
+# Copiar código fuente
+COPY ./api /app/api
+COPY ./core /app/core
+COPY ./.env /app/.env
+
+# Crear usuario no-root para seguridad
+RUN groupadd -r rutia && useradd -r -g rutia rutia
+RUN chown -R rutia:rutia /app
+USER rutia
+
+# Exponer puerto
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Comando por defecto
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "3000", "--reload"]

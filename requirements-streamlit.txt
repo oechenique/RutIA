@@ -1,0 +1,29 @@
+# =============================================================================
+# RutIA Streamlit - Dependencias Dashboard
+# =============================================================================
+
+# Streamlit core
+streamlit==1.28.1
+streamlit-folium==0.15.0
+
+# Mapping
+folium==0.15.0
+
+# Plotting
+plotly==5.17.0
+
+# Data processing
+pandas==2.1.3
+numpy>=1.19.3
+
+# Spatial (básico para H3)
+h3==3.7.6
+
+# HTTP requests
+requests==2.31.0
+
+# Configuration
+python-dotenv==1.0.0
+
+# Utilities
+python-dateutil>=2.7.3

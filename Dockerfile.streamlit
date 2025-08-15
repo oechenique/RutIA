@@ -1,0 +1,99 @@
+# =============================================================================
+# RutIA Streamlit - Dockerfile  
+# Dashboard + Tracking Interface
+# =============================================================================
+
+FROM python:3.11-slim
+
+# Metadatos
+LABEL maintainer="GeoDojo <hello@geodojo.ai>"
+LABEL description="RutIA Dashboard - Tracking en tiempo real"
+LABEL version="1.0.0"
+
+# Variables de entorno
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    # Network tools para API calls
+    curl \
+    wget \
+    # Build tools básicos
+    gcc \
+    g++ \
+    # Clean up
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Copiar requirements Streamlit específicos
+COPY requirements-streamlit.txt .
+
+# Instalar dependencias base
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements-streamlit.txt
+
+# Instalar dependencias específicas para Streamlit
+# (ya incluidas en requirements-streamlit.txt)
+
+# Copiar código fuente
+COPY ./streamlit /app/streamlit
+COPY ./core /app/core
+COPY ./.env /app/.env
+
+# Configuración Streamlit
+RUN mkdir -p /app/.streamlit
+
+# Crear archivo de configuración Streamlit (FIXED)
+RUN echo 
+
+# Crear usuario no-root
+RUN groupadd -r rutia && useradd -r -g rutia rutia
+RUN chown -R rutia:rutia /app
+USER rutia
+
+# Exponer puerto
+EXPOSE 8501
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Comando por defecto
+CMD ["streamlit", "run", "streamlit/main_dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"][server]\\n\
+port = 8501\\n\
+address = "0.0.0.0"\\n\
+enableCORS = false\\n\
+enableXsrfProtection = false\\n\
+\\n\
+[theme]\\n\
+base = "light"\\n\
+primaryColor = "#FF6B6B"\\n\
+backgroundColor = "#FFFFFF"\\n\
+secondaryBackgroundColor = "#F0F2F6"\\n\
+textColor = "#262730"\\n\
+\\n\
+[browser]\\n\
+gatherUsageStats = false\\n\
+\\n\
+[logger]\\n\
+level = "info"' > /app/.streamlit/config.toml
+
+# Crear usuario no-root
+RUN groupadd -r rutia && useradd -r -g rutia rutia
+RUN chown -R rutia:rutia /app
+USER rutia
+
+# Exponer puerto
+EXPOSE 8501
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Comando por defecto
+CMD ["streamlit", "run", "streamlit/main_dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]

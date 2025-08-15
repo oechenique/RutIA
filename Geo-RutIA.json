@@ -1,0 +1,174 @@
+{
+  "name": "Geo-RutIA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "58143be8-fbe9-4ea2-9f1c-7eb62f953cfb",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a94f9715-fa14-4240-bada-b6722e05f316",
+      "name": "Webhook",
+      "webhookId": "58143be8-fbe9-4ea2-9f1c-7eb62f953cfb"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear el JSON del body\nconst pedidoData = JSON.parse($json.body);\n\n// Formatear mensaje para Telegram (como está)\nconst items = pedidoData.pedido.items\n  .map(item => `• ${item.name} - $${item.price.toLocaleString()}`)\n  .join('\\n');\n\nconst mensaje = `🌍 NUEVO PEDIDO DE LA GEOGRÁFICA 🌍\n\n👤 Cliente: ${pedidoData.cliente.nombre}\n📍 Dirección: ${pedidoData.cliente.direccion}\n\n🍽️ PEDIDO:\n${items}\n\n💰 Total: $${pedidoData.pedido.total.toLocaleString()}\n📦 Items: ${pedidoData.pedido.cantidad_items}\n\n🕐 Fecha: ${pedidoData.fecha_legible}\n\n¡Pedido recibido con coordenadas exactas! 🗺️`;\n\n// Generar ID único del pedido\nconst pedidoId = `GEO-${Date.now()}`;\n\nreturn [{\n  json: {\n    // Para Telegram\n    message: mensaje,\n    \n    // Para tabla CLIENTES (normalizado)\n    cliente_nombre: pedidoData.cliente.nombre,\n    cliente_direccion: pedidoData.cliente.direccion,\n    \n    // Para tabla PEDIDOS (normalizado)\n    pedido_id: pedidoId,\n    pedido_total: pedidoData.pedido.total,\n    pedido_cantidad_items: pedidoData.pedido.cantidad_items,\n    pedido_timestamp: pedidoData.timestamp,\n    pedido_fecha_legible: pedidoData.fecha_legible,\n    restaurant: \"La Geográfica\",\n    \n    // Para tabla ITEMS_PEDIDO (array)\n    pedido_items: pedidoData.pedido.items.map((item, index) => ({\n      pedido_id: pedidoId,\n      item_id: index + 1,\n      item_nombre: item.name,\n      item_precio: item.price\n    })),\n    \n    // Data original por si acaso\n    data_original: pedidoData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "8ece5e10-09e1-42a6-a2d5-b9968afa5486",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://765e1326542e.ngrok-free.app/api/pedido",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "cliente_nombre",
+              "value": "={{$json.cliente_nombre}}"
+            },
+            {
+              "name": "cliente_direccion",
+              "value": "={{$json.cliente_direccion}}"
+            },
+            {
+              "name": "pedido_id",
+              "value": "={{$json.pedido_id}}"
+            },
+            {
+              "name": "pedido_total",
+              "value": "={{$json.pedido_total}}"
+            },
+            {
+              "name": "pedido_items",
+              "value": "={{$json.pedido_items}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "24370bc3-6433-4d4f-9d6d-fce231ffc292",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "url": "https://765e1326542e.ngrok-free.app/api/tracking/GEO-1755211885835",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        0
+      ],
+      "id": "274bb745-bcc3-4723-ba3c-5b4b1b2b8d21",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://la-geografica-tracking.vercel.app/api/tracking",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "a6df017d-26e1-4fd0-9869-27310563750c",
+      "name": "HTTP Request2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e6393c2f-eb77-4d08-b11b-736706643477",
+  "meta": {
+    "instanceId": "19a5db478c4aaabded0c19750921b0c35846b0dd5af7fcdc03e25aca285d2359"
+  },
+  "id": "LWL3GZGvk0gOKurS",
+  "tags": []
+}
